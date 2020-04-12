@@ -1,41 +1,330 @@
+# Liar's Dice Server
+# 
+#
+# Receives clients and sets up game. 
+# When minimum players have connected, has countdown to game start
+# If other players arrive after game has started, they can watch the messages out of game.
+# Deals dice to players and gives order of each player.
+# Receieves player's actions and sends results to all players.
+# 
+# 
+
+
 import socket, select, string, threading, random, sys
 
+####################################################################################
+# Globals and configs
+PORT = 36712
+MIN_PLAYERS = 2
+MAX_PLAYERS = 5
+COUNTDOWN_TIME = 5
+MAX_ATTEMPTS = 5
+MAX_DICE = 5
 
-###############################################################################
-#Natalie Kiner, W00846843
-#CSCI 367 - Winter 2012
-#March 13th 2012
-#
-#Lair's Dice socket server. Works with corresponding Lair's Dice socket clients
-#using a uniform messaging standard. Server collects clients and waits until 
-#3-5 players have joined. After a timer ends, the game begins with the players
-#found.
-###############################################################################
+####################################################################################
+# Messages
 
-#Record that contains info about one player in a currently running game.
+gameMessages = {
+    #Server start and lobby messages
+    "server_start" : "The Lair's Dice Server has started running.\n",
+    "player_joined_server" : "Player %s has joined the lobby.\n",
+    "lobby_players" : "The following players are in the lobby: ",
+    
+    #Game countdown timer
+    "timer_start" : "Enough players have joined, Lair's Dice game will begin in %s seconds.\n",
+    "timer_stopped" : "The timer has been stopped. When enough players arrive timer will restart.\n",
+    "timer_ended" : "The timer has ended, the game will begin shortly.\n"
+    
+    #Game start
+    "game_start" : "A new Lair's Dice game has begun!",
 
-class InGameInfo:
-    def __init__(self,HostPort,Pname,Dice, Order):
-        self.HP = HostPort #contains player's host/port identifier
-        self.Pname = Pname #contains player's name
-        self.Dice = Dice #contains array of player's dice
-        self.DiceNo = 5 #Each player starts with 5 dice   
-        self.OutofPlay = False #They are currently in_game, not just watching
-        self.Order = Order #determines order of players
+    #Round start
+    "player_dice" : "Player %s has the following dice: ",
+    "player_turn" : "It is now player %s's turn.\n",
+
+    #Challenge messages
+    "challenge_won" : "The challenging player %s has won! Player %s was caught lying on the bid.\n",
+    "challenge_lost" : "The challenging player %s has lost! Player %s had a valid bid.\n",
+    
+    #Bid messages
+    "player_bid" : "Player %s has bid %s dice of %s value.\n",
+    "invalid_bid" : "Player %s has sent an invalid bid, sending message back.\n",
+
+    #Player quit, kicked, game endings
+    "player_kicked" : "Player %s was kick from the game and sent to the lobby.\n",
+    "game_end_under_min" : "The game has ended due to too few players participating.\n",
+    "game_end_winner" : "The game has ended with player %s winning Lair's Dice.\n",
+    
+    #Error messages
+    "invalid_request" : "Client has sent an invalid request. Moving on...\n"
+}
+
+
+####################################################################################
+# Connection related functionality
+class ClientConnection:
+    def __init__(self, host, port)
+        self.host = host
+        self.port = port
+
+###################################################################################
+# Client sends name of player
+class ClientPlayer: #originally InGameInfo
+    def __init__(self, host, port, name):
+        self.connection = ClientConnection(host, port)
+        self.name = name
+        self.id = id
+        self.inGame = False #Player is either part of game or watching game
+        self.dice = []
+
+
+    def removeDie():
+        self.die.pop()
+
+
+    #Roll new dice
+    def rollDice(self):
+        diceLen = len(self.dice)
+        self.dice = []
+        for x in range(0,diceLen):
+            y = random.randint(1,6)
+            self.dice.append(y)
+
+#################################################################################
+# Sends and recieves messages from the Clients
+class Connection:
+    def __init__(self, port):
+        self.port = port;
+        self.srvsock = socket.socket( socket.AF_INET, socket.SOCK_STREAM )
+        self.srvsock.setsockopt( socket.SOL_SOCKET, socket.SO_REUSEADDR, 1 )
+        self.descriptors = [self.srvsock] #TODO ???
+
+
+    def acceptClient( self ):
+        print "New client has been detected."
+        newsock = self.srvsock.accept() #(host,port) pair
+        self.descriptors.append( newsock )
+
+
+    #Broadcast message
+    def broadcast(self, message):
+        for sock in self.descriptors:
+            if sock != self.srvsock:
+                sock.send(message)
+    
+
+    #Send message to single client
+    def sendmsg(self, message, hostport):
+        for sock in self.descriptors:
+            if sock.getpeername() == hostport:
+                sock.send(mstring)
+                break
+
+
+    #Parses received client message into arrays
+    def parseMessage(self,pstring): #originally MsgDecode2()
+        StrBuild = ""
+        ArrayBuild = []
+        DecodedArray = []
+        for y in range(0,len(pstring)):
+                if pstring[y] == ',':
+                        ArrayBuild.append(StrBuild)
+                        StrBuild = ""
+                elif pstring[y] == ']':
+                        ArrayBuild.append(StrBuild)
+                        DecodedArray.append(ArrayBuild)
+                        StrBuild = ""
+                        ArrayBuild = []
+                else:
+                    if pstring[y] != '[':
+                        StrBuild += pstring[y]
+                
+        return DecodedArray
+
+
+
+####################################################################################   
+# GameServer Class
+
+####################
+# self.gameStatus string:
+# "waiting" - waiting for minimum ammount of players to arrive.
+# "countdown" - enough players have arrived, server is counting down until game starts.
+# "in_game" - game is being played
+
+####################
+# self.clients dictionary:
+# { player_id : ClientPlayer(player_id,..), player_id2 : ClientPlayer(player_id2,..) }
+# Since player names/info is looked up by ids passed by the client
+# searching by id should be easier using the dictionary.
+
+
+class GameServer:
+    def __init__(self)
+        self.playerOrder = [] #Ordered list of player ids
+        self.currentTurn = 0 #Id of the player who has the current turn
+        self.gameStatus = "waiting"
+        self.clients = {}
+        self.previousBid = {"quantity": 0, "value": 0}
+        self.attemptCount = MAX_ATTEMPTS
+        self.countdownTimer = threading.Timer(COUNTDOWN_TIME, self.startGame)
+        self.parsedMessage = ""
+
+
+    #Kick player from game, send to lobby.
+    def kickPlayer(self, id):
+
+        #Send player kicked message to everyone.
+        print gameMessages["player_kicked"] % (self.clients[id].name)
+        kickMessage = '[client_kicked,%s]' % (id)
+        self.connection.broadcast(kickMessage) 
         
+        #Update order, player dice and attempt count
+        self.attemptCount = MAX_ATTEMPTS
+        self.playerOrder.remove(id)
+        self.clients[id].dice = []
+        self.clients[id].inGame = False
+
+        #End game if too few players or start next round
+        if (len(self.playerOrder) < MIN_PLAYERS):
+            self.endGame() #TODO End with not enough players (this needs param to indicate why game ended...)
+        else:
+            self.nextTurn(self.Order)
+    
+
+    #Determines how game ended and sends message about winner.
+    def endGame():
+        #Check if there are enough players in game
+        if (len(self.playerOrder) < MIN_PLAYERS):
+            printMessage["game_end_under_min"]
+        #Check who has remaining dice
+            print gameMessages["game_end_winner"] % (self.clients[winnerId])
+        #Send message about how game ended
+        endMessage = "[game_end,%s]" % (winnerId)
+        self.connection.broadcast(endMessage)
+
+        self.resetGame() #TODO Reset values and move all players to lobby
 
 
-#Record that contains info about one player's current status on the server.
+    def playerQuit(id):
+        #Send messages to self and players.
+        printMessage["player_quit"] % (self.clients[id].name)
+        quitMessage = '[player_quit,%s]' % (id)
+        self.connection.broadcast(quitMessage)
+        #Reset values
+        self.client[id].inGame = False
+        self.client[id].dice = []
+        self.playerOrder.remove(id)
+        #End game if not enough players
+        if (len(self.playerOrder) < MIN_PLAYERS):
+            self.endGame()
+        #Start a new round
+        self.startNewRound() #TODO
+
+
+    def playerChallenge(challegerId, bidderId):
+        #Count up the user's dice quanitites and values
+        diceSums = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0 }
+        for key in self.clients:
+            if (self.clients[key].inGame == True): #Only ingame client dice counted, maybe not needed
+                dice = self.clients[key].dice
+                for index in dice:
+                    diceSums[dice[index]] += diceSums[dice[index]]
         
-class ClientState:
-    def __init__(self, HostPort,Pname,State, Order):
-        self.HP = HostPort #contains the client's host/port identifier
-        self.Pname = Pname #has name of player that joined
-        self.State = State #contains a string of the client's current state
-        self.Order = Order #determines order of players
-        
+        #Check previous bid against dice sum
+        if (diceSums[self.previousBid["value"]] <= self.previousBid["quantity"]):
+            #Bid was correct, challenger loses dice
+            print gameMessages["challenge_won"] % (challengerId, bidderId)
+            self.clients["challenger_id"].dice.pop()
+            challengeMessage = '[challenge_won,%s,%s]' % (challengerId, bidderId)
+            self.connection.broadcast(challengeMessage)
+        else:
+            #Bid was incorrect, bidder loses a dice
+            print gameMessages["challenge_lost"] % (challengerId, bidderId)
+            self.clients["bidder_id"].dice.pop()
+            challengeMessage = '[challenge_lost,%s,%s]' % (challengerId, bidderId)
+            self.connection.broadcast(challengeMessage)
+        #Start next round
+        self.startNewRound()
 
 
+    def playerBid():
+
+
+    def ShowDice(self, winner, loser):
+        roundendmsg = '[round_end,%s' % (loser)
+        for x in range(0,len(self.InGameInfoA)):
+            roundendmsg += "," + str(self.InGameInfoA[x].Order) +","+ str(self.InGameInfoA[x].DiceNo)
+            for y in range(0,len(self.InGameInfoA[x].Dice)):
+                roundendmsg += "," + str(self.InGameInfoA[x].Dice[y])
+        roundendmsg += ']'
+        self.broadcast(roundendmsg)
+        ##New Dice Generated here##
+        for x in range(0,len(self.InGameInfoA)):
+            self.InGameInfoA[x].Dice = self.DiceGen(self.InGameInfoA[x].DiceNo)
+        for x in range(0,len(self.InGameInfoA)):
+            if loser == self.InGameInfoA[x].Order:
+                if (len(self.InGameInfoA[x].Dice) > 0):
+                    self.InGameInfoA[x].Dice.pop()
+                    self.InGameInfoA[x].DiceNo = self.InGameInfoA[x].DiceNo - 1
+                if self.InGameInfoA[x].DiceNo == 0:
+                    self.KickPlayer(self.InGameInfoA[x].HP)
+                    break
+
+
+    #def startGame():
+    # initalize servers
+    # wait for new clients
+    # send messages to clients of server status on join
+    # start timer if enough clients
+    # check if clients have left
+    # game starts
+    # sets player order, gives dice for players
+    # handle new clients after game already started
+
+
+    #originally RunGame()
+    def startGame():
+        print gameMessages["sever_start"]
+        wait 1:
+            #Wait for client requests
+            (sread, swrite, sexc) = select.select( self.descriptors, [], [] )
+            for sock in sread:
+
+                # Received a connect to the server (listening) socket
+                if sock == self.srvsock:
+                  self.connection.acceptClient()  
+                else:
+                    message = sock.recv(100)
+                    if (message != ''):
+                        message = self.connection.parseMessage(message)
+                        self.manageRequest(message)
+
+
+    #reset previous bid
+    #get player order
+    #send dice quantity messages
+    #send player turn message to client
+    def startNewRound():
+
+
+    def manageRequests(message):
+        if (message  == 'join'):
+            self.playerJoined(challenger_id,bidder_id)
+        elif (message == 'quit'):
+            self.playerQuit(id)
+        elif (message == 'bid'):
+            self.playerBid(challenger_id,bidder_id)
+        elif (message == 'challenge'):
+            self.playerChallenge(challenger_id,bidder_id)
+        else:
+            print gameMessages["invalid_request"]
+
+    
+
+
+########################################################################################
+#########################################################################################
 #Server Class
         
 class GameServer:
@@ -63,62 +352,6 @@ class GameServer:
         self.ordercheck = ""
 
 
-
-#Takes a Message sent from the client and decodes it into an array of strings
-#It is assumed one message will be sent at a time from each client.
-    def MsgDecode(self, pstring):
-        x = ' '
-        StrBuild = ""
-        DecodedArray = []
-        for y in range(0,len(pstring)):
-            if pstring[y] == '[':
-                if y > 0:
-                    StrBuild += pstring[y]
-            elif pstring[y] == ',':
-                DecodedArray.append(StrBuild)
-                StrBuild = ""
-            elif pstring[y] == ']':
-                if y < (len(pstring)-1):
-                    StrBuild += pstring[y]
-                else:
-                    DecodedArray.append(StrBuild)
-            else:
-                StrBuild += pstring[y]
-        return DecodedArray
-    
-##############################################################################
-#Takes a Message sent from the client and decodes it into an
-#array of array of strings.
-    def MsgDecode2(self,pstring):
-        StrBuild = ""
-        ArrayBuild = []
-        DecodedArray = []
-        for y in range(0,len(pstring)):
-                if pstring[y] == ',':
-                        ArrayBuild.append(StrBuild)
-                        StrBuild = ""
-                elif pstring[y] == ']':
-                        ArrayBuild.append(StrBuild)
-                        DecodedArray.append(ArrayBuild)
-                        StrBuild = ""
-                        ArrayBuild = []
-                else:
-                    if pstring[y] != '[':
-                        StrBuild += pstring[y]
-                
-        return DecodedArray
-
-    
-#Get Name Using Rank/Order Number
-    def GetNumName(self, number):
-        name = ""
-        for x in range(0,len(self.ClientState)):
-            if self.ClientState[x].Order == number:
-                name = self.ClientState[x].Pname
-                break
-        return name         
-        
-
 #Switches Server state to in_game. Used by the Timer in the waiting/timerwait states.
     def BeginGame(self ):
         self.PreviousBid = [0,0]
@@ -143,263 +376,8 @@ class GameServer:
             #Send their dice, then their turn so they know what to choose
             self.sendmsg(plrdicemsg,Paddress)
         self.broadcast(plturnmsg)  
-        
-        
-        
-        
 
-
-#O#Remove from playing game, but not from the server. Should be able to go back to lobby when finished.      
-    def KickPlayer(self, HP):
-        self.AttemptCount = 5
-        for x in range(0,len(self.InGameInfoA)):
-            if self.InGameInfoA[x].HP == HP:
-                self.InGameInfoA[x].Dice = []
-                print 'Player %s has been removed from play.\n' % (self.InGameInfoA[x].Pname)
-                kickmsg = '[client_kicked,%s]' % (self.InGameInfoA[x].Order)
-                self.broadcast(kickmsg) 
-                for y in range(0,len(self.ClientState)):
-                    if self.ClientState[y].HP == HP:
-                        self.ClientState[y].State = "lobby"
-                self.InGameInfoA.pop(x)
-                break
-        if (len(self.InGameInfoA) == 1):
-            self.EndGame(self.InGameInfoA[0].HP)
-        elif (self.SvrState == "In_Game") and (len(self.InGameInfoA) > 0):
-            self.NextTurn(self.Order)
-        
-
-#X#When game ends, remove InGameInfo, switch client states to lobby and switch SvrState back to lobby.
-    def EndGame( self, winnerHP ):
-        for x in range(0,len(self.InGameInfoA)):
-            if self.InGameInfoA[x].HP == winnerHP:
-                winnerNum = self.InGameInfoA[x].Order
-            for y in range(0, len(self.ClientState)):
-                if self.InGameInfoA[x].HP == self.ClientState[y].HP:
-                    self.ClientState[y].State = "lobby"
-                    self.InGameInfoA.pop(x)
-                    print self.ClientState[y].Pname + ' has returned to the lobby.\n'
-                    break
-        print "The game has ended. The winner is " + self.GetNumName(winnerNum) + "!\n"
-        winnermsg = "[game_end,%s]" % (winnerNum)
-        self.broadcast(winnermsg)
-        self.PreviousBid = [0,0]
-        self.SvrState = "Waiting"
-        self.checkplayers()
-        
-
-        
-#X#Kicks out a client by first determining it's state and then taking appropriate action.
-    def PlayerQuit( self, Pname):
-        for x in range(0,len(self.InGameInfoA)):
-            print self.InGameInfoA[x].Pname
-            if self.InGameInfoA[x].Pname == Pname:
-                HP = self.InGameInfoA[x].HP
-                self.InGameInfoA.pop(x)
-                print 'Player ' + Pname + ' was in game and is now quitting...'
-                for sock in self.descriptors:
-                    if sock != self.srvsock:
-                        if sock.getpeername() == HP:
-                            sock.close()
-                            self.descriptors.remove(sock)
-                            print 'The client socket has been closed.'
-                            break
-                break
-        for x in range(0,len(self.ClientState)):
-            if self.ClientState[x].Pname == Pname:
-                Pnum = self.ClientState[x].Order
-                if Pnum == self.Order:
-                    if Pnum >= len(self.InGameInfoA)-1:
-                        self.Order = 0
-                    else:
-                        self.Order = self.Order + 1
-                HP = self.ClientState[x].HP
-                print 'Player has now left the game...'
-                quitmsg = '[client_quit,%s]' % (Pnum)
-                self.broadcast(quitmsg)
-                self.ClientState.pop(x)
-                break
-        self.printply()
-        if (len(self.InGameInfoA) == 1):
-            self.EndGame(self.InGameInfoA[0].HP)
-        elif self.SvrState == "In_Game":
-            if len(self.InGameInfoA) > 0:
-                self.NextTurn(self.Order)
-                
-#O#Random Dice Generator, takes in number of dice player has and generates
-#an array of that size of dice from 1 to 6.
-
-    def DiceGen(self, diceno):
-        dicearray = []
-        for x in range(0,diceno):
-            y = random.randint(1,6)
-            dicearray.append(y)
-        return dicearray
-
-#~#Sends round end to all players and removes die from loser/gets rid of loser.
-#MERGE to DetermineWinner. Send Round_End Message and remove dice from player.
-#If player has no dice than kick him out.
     
-    def ShowDice(self, winner, loser):
-        roundendmsg = '[round_end,%s' % (loser)
-        for x in range(0,len(self.InGameInfoA)):
-            roundendmsg += "," + str(self.InGameInfoA[x].Order) +","+ str(self.InGameInfoA[x].DiceNo)
-            for y in range(0,len(self.InGameInfoA[x].Dice)):
-                roundendmsg += "," + str(self.InGameInfoA[x].Dice[y])
-        roundendmsg += ']'
-        self.broadcast(roundendmsg)
-        ##New Dice Generated here##
-        for x in range(0,len(self.InGameInfoA)):
-            self.InGameInfoA[x].Dice = self.DiceGen(self.InGameInfoA[x].DiceNo)
-        for x in range(0,len(self.InGameInfoA)):
-            if loser == self.InGameInfoA[x].Order:
-                if (len(self.InGameInfoA[x].Dice) > 0):
-                    self.InGameInfoA[x].Dice.pop()
-                    self.InGameInfoA[x].DiceNo = self.InGameInfoA[x].DiceNo - 1
-                if self.InGameInfoA[x].DiceNo == 0:
-                    self.KickPlayer(self.InGameInfoA[x].HP)
-                    break
-
-
-#X#Checks challenge to determine if the current player is a winner or not.
-    
-    def DetermineWinner(self):
-        dicearray = [0,0,0,0,0,0]
-        for x in range(0,len(self.InGameInfoA)):
-            for y in range(0,len(self.InGameInfoA[x].Dice)):
-                if self.InGameInfoA[x].Dice[y] == 1:
-                    dicearray[0] += 1
-                elif self.InGameInfoA[x].Dice[y] == 2:
-                    dicearray[1] += 1
-                elif self.InGameInfoA[x].Dice[y] == 3:
-                    dicearray[2] += 1
-                elif self.InGameInfoA[x].Dice[y] == 4:
-                    dicearray[3] += 1
-                elif self.InGameInfoA[x].Dice[y] == 5:
-                    dicearray[4] += 1
-                elif self.InGameInfoA[x].Dice[y] == 6:
-                    dicearray[5] += 1
-        print 'The results are: \n'
-        for x in range(0,6):
-            print str(x+1) + ': ' + str(dicearray[x]) + ' dices.'
-
-        print "The order of players went: " + self.ordercheck
-        self.ordercheck = ""
-
-        if dicearray[self.PreviousBid[1]-1] < self.PreviousBid[0]:
-            #Challenger wins
-            winner = self.findranking(self.Order)
-            losername = ""
-            if (self.Order == 0):
-                loser = self.findranking(self.Order)
-                losername = self.ClientState[self.Order].Pname	
-            else:
-                loser = self.findranking(self.Order-1)
-                losername = self.ClientState[self.Order-1].Pname
-            self.ShowDice(winner, loser)
-            print 'Previous player '+ losername +' bid: ' + str(self.PreviousBid[0]) + ' ' + str(self.PreviousBid[1]) + "'s,"
-            print 'and was caught cheating!'
-			
-            
-        else:
-            loser = self.findranking(self.Order)
-            if (self.Order == 0):
-                winner = self.findranking(self.Order)
-            else:
-                winner = self.findranking(self.Order-1)
-            #Challenger loses
-            self.ShowDice(winner, loser)
-            print 'Previous player bid: ' + str(self.PreviousBid[0]) + ' ' + str(self.PreviousBid[1]) + "'s,"
-            print 'and was not cheating!'
-        if len(self.InGameInfoA) == 1: #Only one player left, announce winner.
-            self.PreviousBid = [0,0]
-            self.EndGame(self.InGameInfoA[0].HP)
-        else:
-            #Propagate next round.
-            self.PreviousBid = [0,0]
-            self.BeginGame()
-            
-            
-            
-
-        
-#O#Broadcasting Messages to Everyone
-    def broadcast(self, bstring):
-        for sock in self.descriptors:
-            if sock != self.srvsock:
-                sock.send(bstring)
-
-#O#Send Message to specific client
-    def sendmsg(self, mstring, hostport):
-        for sock in self.descriptors:
-            if sock != self.srvsock:
-                if sock.getpeername() == hostport:
-                    sock.send(mstring)
-                    break
-
-#Finds the nth biggest PlayerNumber(Their Order) in a InGameInfoA
-    def findranking(self, rank):
-        if rank >= len(self.InGameInfoA):
-            rank = (len(self.InGameInfoA)-1)
-        numlist = []
-        for x in range(0,len(self.InGameInfoA)):
-            numlist.append(self.InGameInfoA[x].Order)
-        numlist.sort()
-        return numlist[rank]
-    
-#O#Finds which player goes next by order and sends message with that player's name.
-    def NextTurn(self, order):
-        if len(self.InGameInfoA) == 1:
-            self.EndGame(self.InGameInfoA[0].HP)
-        else:
-            SrtPnum  = self.findranking(order)
-            self.ordercheck += str(SrtPnum)
-            print 'Player ' + self.GetNumName(SrtPnum) + ' is going next.'
-            plturnmsg = '[player_turn,%s]' % (SrtPnum)
-            self.broadcast(plturnmsg)
-    
-
-    def checkplayers(self):
-        if len(self.ClientState) >= self.MinPlayers: #at least 2 players needed
-            for x in range(0, len(self.ClientState)):
-                if len(self.InGameInfoA) < self.MaxPlayers: #up to 5 players can be handled
-                    self.ClientState[x].State = "lobby_with_timer"
-                    Ord = self.ClientState[x].Order
-                    Pnm = self.ClientState[x].Pname
-                    newplayerinfo = InGameInfo(self.ClientState[x].HP,Pnm,self.DiceGen(5),Ord)
-                    self.InGameInfoA.append(newplayerinfo)
-            strpc = str(len(self.InGameInfoA))
-            timemsg = '[timer_start,%s]' % (self.GameWTimer)
-            self.broadcast(timemsg)
-            print strpc + " have joined, "+ str(self.GameWTimer)+ " seconds until game starts.\n"
-            self.SvrState = "TimerWait"
-            try:
-                self.waitt.start()
-            except:
-                self.waitt.cancel()
-                self.waitt = threading.Timer(self.GameWTimer, self.BeginGame)
-                self.waitt.start()
-            
-
-#Shows how many people are at what state on the server.
-    def printply(self):
-          svrstr = 'Players on server: '
-          if len(self.ClientState) != 0:
-              svrstr += self.ClientState[0].Pname
-              for x in range(1,len(self.ClientState)):
-                  svrstr += ',' + self.ClientState[x].Pname
-              print svrstr
-          else:
-            print svrstr + 'None'
-        
-          gamstr = 'Players in Game: '
-          if len(self.InGameInfoA) != 0:
-              gamstr += self.InGameInfoA[0].Pname
-              for x in range(1,len(self.InGameInfoA)):
-                  gamstr += ',' + self.InGameInfoA[x].Pname
-              print gamstr + '\n'
-          else:
-            print gamstr + 'None\n'
 
         
 ##############################################################################
@@ -410,26 +388,7 @@ class GameServer:
         
       print "The Lair's Dice Server has Started Running.\n"
 
-      argbound = False
-      for x in range(0,len(sys.argv)):
-          if (sys.argv[x] == "-p"):
-              argbound = True
-              self.srvsock.bind( ("", sys.argv[x+1]) ) #Connects to the requested port.
-          elif (sys.argv[x] == "-m"):
-              self.MinPlayers = sys.argv[x+1]
-          elif (sys.argv[x] == "-M"):
-              self.MaxPlayers = sys.argv[x+1]
-          elif (sys.argv[x] == "-t"):
-              self.LobbyWTimer = sys.argv[x+1]
-          elif (sys.argv[x] == "-a"):
-              self.AttemptCount = sys.argv[x+1]
-              self.AC = sys.argv[x+1]
 
-      if argbound == False:
-          self.srvsock.bind( ("", self.port) ) #Connects to default port, self.port.
-      self.srvsock.listen( 5 )
-          
-            
               
       while 1:
           # Await an event on a readable socket descriptor
@@ -448,14 +407,8 @@ class GameServer:
                 # Received something on a client socket
                 str1 = sock.recv(100)
                 #MsgArray = self.MsgDecode(str1)
-                if str1 == '':
-                    for x in range(0,len(self.ClientState)):
-                        if (sock != self.srvsock):
-                            if (self.ClientState[x].HP == sock.getpeername()):
-                                Pname = self.ClientState[x].Pname
-                                break
-                    self.PlayerQuit(Pname)
-                    MsgArray = [[""]]
+
+
                 MsgArray = self.MsgDecode2(str1)
                 ##print MsgArray
                 for q in range(0,len(MsgArray)):

@@ -2,6 +2,10 @@
 
 ---
 
-Very old server client game I made in college using Python websockets.
+## Liar's Dice is a Client Server game made using Python's Websockets
+This was created for my CS Networking class while attending University.
 
-As of March 2020, needs to be re-tested and refactored.
+To Do:
+- Refactor Client and Server Classes
+- Add GUI Layout
+

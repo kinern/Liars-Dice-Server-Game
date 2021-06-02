@@ -1,7 +1,12 @@
-#Liar's Dice without multiplayer
-
+#Liar's Dice without multiplayer websockets. 
+#Uses basic NPCs opponents.
 
 import socket, sys, string, random
+
+#Globals
+MAX_PLAYERS = 3
+MAX_DICE = 5
+START_BID = {"quantity": 0, "value": 0}
 
 class Player:
     def __init__(self, numDice):
@@ -22,11 +27,11 @@ class Player:
 class GameClient:
     def __init__(self):
         self.players = []
-        self.maxPlayers = 3
-        self.maxDice = 5
+        self.maxPlayers = MAX_PLAYERS
+        self.maxDice = MAX_DICE
         self.user = Player(self.maxDice)
         self.currentTurn = 0 #players = 0..n-1, player = n
-        self.previousBid = {"quantity": 0, "value": 0}
+        self.previousBid = START_BID
 
     def startGame(self):
         for x in range(self.maxPlayers):

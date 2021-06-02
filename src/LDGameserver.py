@@ -36,6 +36,35 @@ class ClientConnection:
         self.host = host
         self.port = port
 
+# Get incoming connection, put into lobby
+# Lobby checks if enough people, if so start timer
+# When timer ends and all players present, create new game 
+# Game initiates with player info and dice and turn
+# Game loops through turns until there is a winner
+# After game ends, player returns to the lobby
+
+class Connection
+# Info about player's connection status and identity
+
+class Lobby
+# Adds new players to list when connected. Put into waiting players list.
+# When enough players arrive, start a timer.
+# If there are enough players when timer ends:
+# Create new game to list of games, pass waiting player objects into game 
+# If not enough players stop timer and continue to accept players.
+
+class Game
+# Created with list of players.
+# Give turn orders to all the players.
+# Give each player an array of dice.
+# Loop through turns:
+
+
+class PlayerInfo
+
+class Dice
+
+    
 
 ###################################################################################
 # Client sends name of player

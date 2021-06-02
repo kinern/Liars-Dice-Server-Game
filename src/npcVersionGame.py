@@ -34,14 +34,30 @@ class GameClient:
         self.setupRound()
 
     def setupRound(self):
-        #Get opponent dice
         for player in self.players:
             player.createDice()
-        #Get user dice
         self.user.createDice()
         self.currentTurn = random.randint(0,len(self.players))
         self.nextTurn()
 
+    def nextTurn(self):
+        self.printTurnStats()
+        if self.currentTurn == len(self.players):
+            print("It is your turn.")
+            self.playerRound()
+        else:
+            print("It is player %s's turn" % self.currentTurn)
+            self.opponentRound()
+
+    def printTurnStats(self):
+        print("======= Next Turn =========")
+        print("Number of players: %s" % (len(self.players)+1))
+        print("Current bid: %s dice of value %s" % (self.previousBid["quantity"], self.previousBid["value"]))
+        print("Your dice: %s" % self.user.dice)
+        print("---------------------------")
+
+
+    #Player Turn
     def playerRound(self):
         quantity = self.previousBid["quantity"]
         value = self.previousBid["value"]
@@ -59,54 +75,6 @@ class GameClient:
             else:
                 print("Something went wrong! Bye...")
 
-    def getLetterInput(self, letterArray):
-        userInput = raw_input('-->')
-        userInput = string.upper(userInput)
-        inList = userInput in letterArray
-        while not inList:
-            print('Invalid response, try again.')
-            userInput = raw_input('-->')
-            string.upper(userInput)
-            inList = userInput in letterArray
-        return userInput
-
-    #todo max number dice/value check
-    def getNumberInput(self, minNumber, maxNumber = 100):
-        inputNumber = raw_input('-->')
-        inputNumber = int(inputNumber)
-        validBid =  inputNumber > minNumber
-        while not validBid:
-            print("Bid not valid, try again:")
-            inputNumber = raw_input('-->')
-            inputNumber = int(inputNumber)
-            validBid = inputNumber > minNumber
-        return inputNumber
-
-    def getUserAction(self):
-        print("Bid or Challenge? (B = Bid, C = Challenge, Q = Quit Game):")
-        actionOptions = ["B", "C", "Q"]
-        return self.getLetterInput(actionOptions)
-    
-    def getBidType(self):
-        print("Increase quantity or value of bid? (Q or V):")
-        bidOptions = ["Q", "V"]
-        return self.getLetterInput(bidOptions)
-
-    def getBidAmount(self):
-        print("What is the new bid's dice quantity? (Previous bid: %s):" % self.previousBid["quantity"])
-        return self.getNumberInput(self.previousBid["quantity"])
-    
-    def getBidValue(self):
-        print("What is the new bid's dice face value? (Previous bid: %s):" % self.previousBid["value"])
-        return self.getNumberInput(self.previousBid["value"])
-
-    def getDiceSum(self):
-        sum = len(self.user.dice)
-        for player in self.players:
-            sum = sum + len(player.dice)
-        return sum
-
-    #If new game and bid is 0,0 allow user to make new bid
     def createNewBid(self):
         print("What is the dice face value of the new bid?:")
         self.previousBid["value"] = self.getNumberInput(0, 6)
@@ -116,7 +84,14 @@ class GameClient:
         print("You have bet %s dice of value %s" % (self.previousBid["quantity"], self.previousBid["value"]))
         self.changeTurnOrder()
         self.nextTurn()
-    
+
+    def getUserAction(self):
+        print("Bid or Challenge? (B = Bid, C = Challenge, Q = Quit Game):")
+        actionOptions = ["B", "C", "Q"]
+        return self.getLetterInput(actionOptions)
+
+
+    #Player Bid
     def actionBid(self):
         bidType = self.getBidType()
         if bidType == "Q":
@@ -129,12 +104,66 @@ class GameClient:
         self.changeTurnOrder()
         self.nextTurn()
 
+    def getBidType(self):
+        if self.previousBid["quantity"] == self.getDiceSum():
+            print("Maximum number of dice being bid, can only increase face value.")
+            self.getBidValue()
+        elif self.previousBid["value"] == 6:
+            print("Maximum value being bid, can only increase quantity.")
+            self.getBidAmount()
+        else:
+            print("Increase quantity or value of bid? (Q or V):")
+            bidOptions = ["Q", "V"]
+            return self.getLetterInput(bidOptions)
+
+    def getBidValue(self):
+        print("What is the new bid's dice face value? (Previous bid: %s):" % self.previousBid["value"])
+        return self.getNumberInput(self.previousBid["value"], 6)
+
+    def getBidAmount(self):
+        print("What is the new bid's dice quantity? (Previous bid: %s):" % self.previousBid["quantity"])
+        return self.getNumberInput(self.previousBid["quantity"], self.getDiceSum())
+
+    def getLetterInput(self, letterArray):
+        userInput = raw_input('-->')
+        userInput = string.upper(userInput)
+        inList = userInput in letterArray
+        while not inList:
+            print('Invalid response, try again.')
+            userInput = raw_input('-->')
+            string.upper(userInput)
+            inList = userInput in letterArray
+        return userInput
+
+    def getNumberInput(self, minNumber, maxNumber = 100):
+        inputNumber = raw_input('-->')
+        if inputNumber.isdigit():
+            inputNumber = int(inputNumber)
+        validBid =  inputNumber > minNumber and inputNumber <= maxNumber
+        while not validBid:
+            print("Bid not valid, try again:")
+            inputNumber = raw_input('-->')
+            if inputNumber.isdigit():
+                inputNumber = int(inputNumber)
+            validBid = inputNumber > minNumber and inputNumber <= maxNumber
+        return inputNumber
+
+    def getDiceSum(self):
+        sum = len(self.user.dice)
+        for player in self.players:
+            sum = sum + len(player.dice)
+        return sum
+
+
+    #Player Challenge
     def actionChallenge(self):
         print("You challenge the previous bid!")
         self.challenge()
 
     def challenge(self):
-        if self.wonChallenge():
+        if self.correctBid():
+            print(self.currentTurn)
+            print(len(self.players))
             if self.currentTurn == len(self.players):
                 print("The bid was correct! You lose one die.")
                 self.user.removeDie()
@@ -150,7 +179,7 @@ class GameClient:
                 self.players[self.currentTurn-1].removeDie()
         self.endRound()
     
-    def wonChallenge(self):
+    def correctBid(self):
         diceTotals = {1:0, 2:0, 3:0, 4:0, 5:0, 6:0}
         for player in self.players:
             print("Player %s's dice: %s" % (self.players.index(player), player.dice))
@@ -159,52 +188,29 @@ class GameClient:
         
         print("bid: %s %s" % (self.previousBid["quantity"], self.previousBid["value"]))
         print("actual: %s %s" % (diceTotals[self.previousBid["value"]], self.previousBid["value"]))
-        return  diceTotals[self.previousBid["value"]] <= self.previousBid["quantity"]
+        return  diceTotals[self.previousBid["value"]] >= self.previousBid["quantity"]
 
-    def changeTurnOrder(self):
-        if self.currentTurn == len(self.players):
-            self.currentTurn = 0
+
+    #Opponent Turn
+    def opponentRound(self):
+        value = self.previousBid["value"]
+        quantity = self.previousBid["quantity"]
+        if value == 0 or quantity == 0:
+            self.opponentCreateBid()
+            self.changeTurnOrder()
+            self.nextTurn()
         else:
-            self.currentTurn = self.currentTurn + 1
-
-    def nextTurn(self):
-        #check current turn number
-        #increase current turn number until max player, then reset to 0
-
-        print("======= Next Turn =========")
-        print("Number of players: %s" % (len(self.players)+1))
-        print("Current bid: %s dice of value %s" % (self.previousBid["quantity"], self.previousBid["value"]))
-        print("Your dice: %s" % self.user.dice)
-        print("---------------------------")
-
-        if self.currentTurn == len(self.players):
-            print("It is your turn.")
-            self.playerRound()
-        else:
-            print("It is player %s's turn" % self.currentTurn)
-            value = self.previousBid["value"]
-            quantity = self.previousBid["quantity"]
-            if value == 0 or quantity == 0:
-                self.opponentCreateBid()
+            action = random.randint(0,3) #1/4th chance of opponent challenging bid
+            if action == 0:
+                print("Player %s is challenging the bid!" % self.currentTurn)
+                self.challenge()
+            else:
+                print("Player %s is increasing the bid!" % self.currentTurn)
+                self.opponentBid()
                 self.changeTurnOrder()
                 self.nextTurn()
-            else:
-                action = random.randint(0,3) #1/4th chance of opponent challenging bid
-                if action == 0:
-                    print("Player %s is challenging the bid!" % self.currentTurn)
-                    self.challenge()
-                else:
-                    print("Player %s is increasing the bid!" % self.currentTurn)
-                    self.opponentBid()
-                    self.changeTurnOrder()
-                    self.nextTurn()
-    
-    def opponentCreateBid(self):
-        print("Player %s is creating a new bid!" % self.currentTurn)
-        self.previousBid["value"] = random.randint(1,6)
-        self.previousBid["quantity"]  = random.randint(1,3)
-        print("Player %s has bid: %s dice of value %s" % (self.currentTurn, self.previousBid["quantity"], self.previousBid["value"]))
 
+    #Opponent Bid
     def opponentBid(self):
         rand = random.randint(0,1)
         prevValue = self.previousBid["value"]
@@ -215,11 +221,13 @@ class GameClient:
             self.previousBid["quantity"] = prevQuantity + 1
         print("The opponent has bid %s dice of value %s" % (self.previousBid["quantity"], self.previousBid["value"]))
 
+    def opponentCreateBid(self):
+        print("Player %s is creating a new bid!" % self.currentTurn)
+        self.previousBid["value"] = random.randint(1,6)
+        self.previousBid["quantity"]  = random.randint(1,3)
+        print("Player %s has bid: %s dice of value %s" % (self.currentTurn, self.previousBid["quantity"], self.previousBid["value"]))
 
-    #round has ended after a challenge
-    #remove players without dice
-    #start new currentTurn
-    #reset previousBid
+    #Round End
     def endRound(self):
         print("The round has ended.")
         if len(self.user.dice) == 0:
@@ -235,6 +243,12 @@ class GameClient:
                 self.previousBid = self.previousBid = {"quantity": 0, "value": 0}
                 print("A new round has started.")
                 self.nextTurn()
+
+    def changeTurnOrder(self):
+        if self.currentTurn == len(self.players):
+            self.currentTurn = 0
+        else:
+            self.currentTurn = self.currentTurn + 1
     
     def gameOver(self):
         print("You have no dice! You lose the game...")
@@ -245,7 +259,7 @@ class GameClient:
         return
 
     def actionQuitGame(self):
-        print("You quit the game! Bye~!")
+        print("Bye~!")
 
 
 game = GameClient()

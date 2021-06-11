@@ -130,24 +130,24 @@ class GameClient:
         return self.getNumberInput(self.previousBid["quantity"], self.getDiceSum())
 
     def getLetterInput(self, letterArray):
-        userInput = raw_input('-->')
-        userInput = string.upper(userInput)
+        userInput = input('-->')
+        userInput = userInput.upper()
         inList = userInput in letterArray
         while not inList:
             print('Invalid response, try again.')
-            userInput = raw_input('-->')
-            string.upper(userInput)
+            userInput = input('-->')
+            userInput = userInput.upper()
             inList = userInput in letterArray
         return userInput
 
     def getNumberInput(self, minNumber, maxNumber = 100):
-        inputNumber = raw_input('-->')
+        inputNumber = input('-->')
         if inputNumber.isdigit():
             inputNumber = int(inputNumber)
         validBid =  inputNumber > minNumber and inputNumber <= maxNumber
         while not validBid:
             print("Bid not valid, try again:")
-            inputNumber = raw_input('-->')
+            inputNumber = input('-->')
             if inputNumber.isdigit():
                 inputNumber = int(inputNumber)
             validBid = inputNumber > minNumber and inputNumber <= maxNumber

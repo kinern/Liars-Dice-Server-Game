@@ -90,9 +90,8 @@ async def gameLoop():
 
 def handleNextTurn(response):
     #Find name of current turn player by searching through players by turn_id
-    turnPlayerName = response["players"]["id"]
     #Print next turn information
-    print(messages["roundStart"], response["players"], response["prev_bid"], response["dice"], turnPlayerName)
+    print(messages["roundStart"], response["players"], response["prev_bid"], response["dice"], response["turn_name"])
     #If turn id is player id, get player's move
     if response["turn_id"] == playerId:
         if response["prev_bid"]["val"] == 0:

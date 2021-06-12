@@ -82,18 +82,56 @@ class Game:
             await asyncio.sleep(5)
 
 
-    async def updateBid(self, response):
+    async def updateBid(self, response, websocket):
         if response["id"] == self.getCurrentTurnId():
-            self.prevBid["quantity"] = response["new_bid"]["quantity"]
-            self.prevBid["value"] = response["new_bid"]["value"]
-            jsonMsg = json.dumps({
-                "action":"bid",
-                "player": response["id"],
-                "new_bid" : response["new_bid"]
-            })
-            await asyncio.wait([ws.send(jsonMsg) for ws in userWebsockets])
-            await asyncio.sleep(5)
-            await self.nextTurn()
+            if self.validBid(response["new_bid"]):
+                self.prevBid["quantity"] = response["new_bid"]["quantity"]
+                self.prevBid["value"] = response["new_bid"]["value"]
+                jsonMsg = json.dumps({
+                    "action":"bid",
+                    "player": self.getPlayerById(response["id"]).name,
+                    "new_bid" : response["new_bid"]
+                })
+                await asyncio.wait([ws.send(jsonMsg) for ws in userWebsockets])
+                await asyncio.sleep(5)
+                await self.nextTurn()
+            else:
+                #resend request to bidder
+                jsonMsg = json.dumps({
+                    "action": "bid_invalid",
+                    "id": response["id"],
+                    "prev_bid": self.prevBid
+                })
+                await websocket.send(jsonMsg)
+
+
+    def getPlayerById(self, id):
+        for player in self.players:
+            if player.id == id:
+                return player
+        return False
+
+
+    def diceSum(self):
+        diceSum = 0
+        for player in self.players:
+            diceSum = diceSum + len(player.dice)
+        return diceSum
+
+
+    def validBid(self, newBid):
+        try:
+            newQuantity = int(newBid["quantity"])
+            newValue = int(newBid["value"])
+        except:
+            return False
+        if newQuantity >= self.diceSum() or 1 < newValue or newValue > 6:
+            return False
+        if newQuantity == self.prevBid["quantity"] and newValue == self.prevBid["value"]:
+            return False
+        if newQuantity < self.prevBid["quantity"] or newValue < self.prevBid["value"]:
+            return False      
+        return True
 
 
     async def handleChallenge(self, response):
@@ -175,16 +213,13 @@ async def main(websocket, path):
 
         if "action" in response:
             if response["action"] == "join":
-
                 playerId = await playerJoin(response, websocket)
                 await websocket.send(json.dumps({"action":"setup", "id": playerId}))
-
                 if len(players) >= MIN_PLAYERS:
                     game = Game()
                     await game.nextTurn()
-
             elif response["action"] == "bid":
-                await game.updateBid(response)
+                await game.updateBid(response, websocket)
             elif response["action"] == "challenge":
                 await game.handleChallenge(response)
         response = {}

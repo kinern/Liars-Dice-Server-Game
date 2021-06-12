@@ -40,7 +40,8 @@ messages = {
     ),
     "playerLost" : "Player %s has no more dice and has been removed from play.",
     "endGame" : "The game has ended, player %s is the winner!",
-    "endGameWon" : "The game has ended, you have won the game! Congrats!"
+    "endGameWon" : "The game has ended, you have won the game! Congrats!",
+    "bidInvalid" : "The bid was invalid, try again."
 }
 
 
@@ -56,21 +57,143 @@ class Player:
         self.dice = []
 
 
-player = Player()
+class Game:
+    def __init__(self, player):
+        self.serverSocket = None
+        self.response = None
+        self.player = player
 
+    # Next Turn
+    async def nextTurn(self):
+        print(messages["roundStart"] % (
+            self.response["players"], 
+            self.response["prev_bid"]["quantity"], 
+            self.response["prev_bid"]["value"], 
+            self.response["dice"], 
+            self.response["turn_name"])
+        )
+        if self.response["turn_id"] != self.player.id:
+            return
+        if self.response["prev_bid"]["value"] == 0:
+            await self.newBid()
+        else:
+            print(messages["yourAction"])
+            actionType = inputHelper.getLetterInput(["B", "C"])
+            if actionType == "B":
+                await self.updateBid()
+            elif actionType == "C":
+                await self.challenge()
+
+    async def handleInvalidBid(self):
+        print(messages["bidInvalid"])
+        await self.bid()
+
+    ## Bidding
+    async def bid():
+        if self.response["prev_bid"]["value"] == 0:
+            await self.newBid()
+        else:
+            await self.updateBid()
+
+    async def newBid(self):
+        print(messages["yourTurnBidOnly"])
+        await self.updateBid()
+
+    async def updateBid(self):
+        yourBidQuantity = messages["yourBidQuantity"] % (
+            self.response["prev_bid"]["quantity"], 
+            self.response["prev_bid"]["value"]
+        )
+        yourBidValue = messages["yourBidValue"] % (
+            self.response["prev_bid"]["quantity"], 
+            self.response["prev_bid"]["value"]
+        )
+        bidQuantity = input(yourBidQuantity)
+        bidValue = input(yourBidValue)
+        jsonMsg = {
+            "action": "bid",
+            "id": self.player.id,
+            "new_bid": {"quantity": bidQuantity, "value": bidValue}
+        }
+        await self.serverSocket.send(json.dumps(jsonMsg))
+    
+    ## Challenging
+    async def challenge(self):
+        jsonMsg = {
+            "action":"challenge",
+            "id": self.player.id
+        }
+        await self.serverSocket.send(json.dumps(jsonMsg))
+
+    def handleChallenge(self):
+        msg = messages["challengeWonResult"] if self.response["won"] == 1 else messages["challengeLostResult"]
+        fullMsg = (msg % (
+            self.response["challenge_name"], 
+            self.response["prev_bid"]["quantity"], 
+            self.response["prev_bid"]["value"], 
+            self.response["loser_name"])
+        )
+        print(fullMsg)
+
+    ## End Game
+    def endgame(self):
+        msg = messages["endGameWon"] if self.response["winner_id"] == self.player.id else messages["endGame"]
+        print(msg)
+
+
+class InputHelper:
+
+    def enterName(self):
+        print(messages["name"])
+        name = input('-->')
+        name = name.strip()
+        while len(name) < 1:
+            name = input('-->')
+            name = name.strip()
+        return name
+
+    def getLetterInput(self, letterArray):
+        userInput = input('-->')
+        userInput = userInput.strip().upper()
+        inList = userInput in letterArray
+        while not inList:
+            print('Invalid response, try again.')
+            userInput = input('-->')
+            userInput = userInput.strip().upper()
+            inList = userInput in letterArray
+        return userInput
+
+    def getNumberInput(self, minNumber = 0, maxNumber = 100):
+        inputNumber = input('-->')
+        if inputNumber.isdigit():
+            inputNumber = int(inputNumber)
+        validBid =  inputNumber > minNumber and inputNumber <= maxNumber
+        while not validBid:
+            print("Bid not valid, try again:")
+            inputNumber = input('-->')
+            if inputNumber.isdigit():
+                inputNumber = int(inputNumber)
+            validBid = inputNumber > minNumber and inputNumber <= maxNumber
+        return inputNumber
+    
+
+inputHelper = InputHelper()
+player = Player()
+game = Game(player)
 
 #Send username to the game server
 async def gameLoop():
     async with websockets.connect('ws://localhost:1234') as socket:
 
         print('== Client Started ==')
+        game.serverSocket = socket
 
         #Initial setup: send name to server
-        if player.id == 0:
-            playerName = input(messages["name"])
+        if game.player.id == 0:
+            game.player.name = inputHelper.enterName()
             jsonMsg = {
                 "action":"join",
-                "name": playerName
+                "name": game.player.name
             }
             await socket.send(json.dumps(jsonMsg))
         
@@ -78,84 +201,38 @@ async def gameLoop():
         while True:
             response = await socket.recv()
             response = parseMsg(response)
+            game.response = response
             print(response)
 
             #Handle message
             if "action" in response:
+                
+                # Player Info Message
                 if response["action"] == "setup":
-                    player.id = response["id"]
-                    print(player.id)
+                    game.player.id = response["id"]
                     print(messages["connected"])
+                
+                # Server Broadcasted Messages
                 if response["action"] == "joined":
-                    #Print player has joined message
                     print(messages["joined"] % (response["name"]))
                 if response["action"] == "start":
-                    #Print game has started message
                     print(messages["newGameStart"])
-                if response["action"] == "next_turn":
-                    await handleNextTurn(response, socket)
                 if response["action"] == "bid":
-                    #Print bid message
-                    print(messages["playerBid"])
+                    print(messages["playerBid"] % (response["player"], response["new_bid"]["quantity"], response["new_bid"]["value"]))
+                
+                # Game Messages
+                if response["action"] == "next_turn":
+                    await game.nextTurn()
+                if response["action"] == "bid_invalid":
+                    if response["id"] == game.player.id:
+                        await game.handleInvalidBid()
                 if response["action"] == "challenge":
-                    handleChallenge(response)
+                    game.handleChallenge()
                 if response["action"] == "end_game":
-                    handleEndgame(response)
+                    game.endgame(response)
+                
             #Empty response
             response = {}
-
-
-async def handleNextTurn(response, socket):
-    #Find name of current turn player by searching through players by turn_id
-    #Print next turn information
-    print(messages["roundStart"] % (response["players"], response["prev_bid"]["quantity"], response["prev_bid"]["value"], response["dice"], response["turn_name"]))
-    #If turn id is player id, get player's move
-    if response["turn_id"] == player.id:
-        if response["prev_bid"]["value"] == 0:
-            print(messages["yourTurnBidOnly"])
-            bidQuantity = input(messages["yourBidQuantity"])
-            bidValue = input(messages["yourBidValue"])
-            jsonMsg = {
-                "action":"bid",
-                "new_bid": {"quantity": bidQuantity, "value": bidValue},
-                "id": player.id
-            }
-            await socket.send(json.dumps(jsonMsg))
-        else:
-            actionType = input(messages["yourAction"])
-            if actionType == "B":
-                bidQuantity = input(messages["yourBidQuantity"])
-                bidValue = input(messages["yourBidValue"])
-                jsonMsg = {
-                    "action": "bid",
-                    "id": player.id,
-                    "new_bid": {"quantity": bidQuantity, "value": bidValue}
-                }
-                await socket.send(json.dumps(jsonMsg))
-            elif actionType == "C":
-                #Send challenge message to server...
-                jsonMsg = {
-                    "action":"challenge",
-                    "id": player.id
-                }
-                await socket.send(json.dumps(jsonMsg))
-
-
-def handleChallenge(response):
-    #Print challenge/round end message
-    if (response["won"] == 1):
-        print(messages["challengeWonResult"])
-    else:
-        print(messages["challengeLostResult"])
-
-
-def handleEndgame(response):
-    #Check if winner id is players's id
-    #Print end game message
-    if (response["winner_id"] == playerId):
-        print(messages["endGameWon"])
-    else:
-        print(messages["endGame"])
 
 
 asyncio.get_event_loop().run_until_complete(gameLoop())

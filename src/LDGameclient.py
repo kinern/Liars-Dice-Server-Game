@@ -8,7 +8,7 @@ import json
 messages = {
     "name" : "== Please enter your name: ",
     "connected" : 'You are connected to the Lair\'s Dice server! Hello.',
-    "playerJoined" : 'Player %s has joined.',
+    "joined" : 'Player %s has joined.',
     "newGameStart" : (
         "------------------------------------------------"
         "            Let's Play Lair's Dice!             "
@@ -68,40 +68,42 @@ async def gameLoop():
 
         #Initial setup: send name to server
         if player.id == 0:
-            playerName = input(messages.name)
+            playerName = input(messages["name"])
             jsonMsg = {
+                "action":"join",
                 "name": playerName
             }
-            await socket.send(jsonMsg)
+            await socket.send(json.dumps(jsonMsg))
         
         #Get server message
-        response = await socket.recv()
-        response = parseMsg(response)
-        print(response)
+        while True:
+            response = await socket.recv()
+            response = parseMsg(response)
+            print(response)
 
-        #Handle message
-        if response.has_key("action"):
-            if response["action"] == "setup":
-                playerId = response["id"]
-                #Get id from server
-                print(messages["connected"])
-            if response["action"] == "joined":
-                #Print player has joined message
-                print(messages["joined"], response["name"])
-            if response["action"] == "start":
-                #Print game has started message
-                print(messages["newGameStart"])
-            if response["action"] == "next_turn":
-                handleNextTurn(response)
-            if response["action"] == "bid":
-                #Print bid message
-                print(messages["playerBid"])
-            if response["action"] == "challenge":
-                handleChallenge(response)
-            if response["action"] == "end_game":
-                handleEndgame(response)
-        #Empty response
-        response = {}
+            #Handle message
+            if "action" in response:
+                if response["action"] == "setup":
+                    player.id = response["id"]
+                    print(player.id)
+                    print(messages["connected"])
+                if response["action"] == "joined":
+                    #Print player has joined message
+                    print(messages["joined"] % (response["name"]))
+                if response["action"] == "start":
+                    #Print game has started message
+                    print(messages["newGameStart"])
+                if response["action"] == "next_turn":
+                    handleNextTurn(response)
+                if response["action"] == "bid":
+                    #Print bid message
+                    print(messages["playerBid"])
+                if response["action"] == "challenge":
+                    handleChallenge(response)
+                if response["action"] == "end_game":
+                    handleEndgame(response)
+            #Empty response
+            response = {}
 
 
 async def handleNextTurn(response):
@@ -142,3 +144,4 @@ def handleEndgame(response):
 
 
 asyncio.get_event_loop().run_until_complete(gameLoop())
+asyncio.get_event_loop().run_forever()

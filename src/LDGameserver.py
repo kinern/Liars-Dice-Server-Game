@@ -21,7 +21,7 @@ import random
 players = []
 userWebsockets = []
 MAX_DICE = 5
-MAX_PLAYERS = 3
+MIN_PLAYERS = 3
 game = None
 
 
@@ -31,7 +31,7 @@ class Player:
         self.id = id
         self.websocket = ws
         self.numDice = MAX_DICE
-        self.dice = createDice(self.numDice)
+        self.dice = self.createDice()
     
     def createDice(self):
         dice = []
@@ -50,8 +50,6 @@ def getPlayerNames():
     for player in inGamePlayers:
         names.append(player["name"])
     return names
-
-
 
 
 class Game:
@@ -168,34 +166,34 @@ async def main(websocket, path):
 
     print('== Server Started ==')
 
-    response = await websocket.recv()
-    response = parseMsg(response)
+    while True:
+        response = await websocket.recv()
+        response = parseMsg(response)
+        print(response)
 
-    if response.has_key("action"):
-        if response["action"] == "join":
+        if "action" in response:
+            if response["action"] == "join":
 
-            playerId = playerJoin(response, websocket)
-            await websocket.send(json.dumps({"id": playerId}))
+                playerId = await playerJoin(response, websocket)
+                await websocket.send(json.dumps({"action":"setup", "id": playerId}))
 
-            if len(players) >= MIN_PLAYERS:
-                game = Game(players)
-                game.nextTurn()
+                if len(players) >= MIN_PLAYERS:
+                    game = Game()
+                    game.nextTurn()
 
-        elif response["action"] == "bid":
-            game.updateBid(response)
-        elif response["action"] == "challenge":
-            game.handleChallenge(response)
+            elif response["action"] == "bid":
+                game.updateBid(response)
+            elif response["action"] == "challenge":
+                game.handleChallenge(response)
+        response = {}
 
 
 async def playerJoin(response, ws):
-    newId = uuid.uuid1()
+    newId = str(uuid.uuid1())
     players.append(Player(response["name"], newId, ws))
-    userWebsockets.add(ws)
-    jsonMsg = json.dumps({
-        "action":"joined",
-        "player": response["name"]
-    })
-    await asyncio.wait([ws.send(jsonMsg) for ws in userWebsockets])
+    userWebsockets.append(ws)
+    jsonMsg = {"action":"joined", "name": response["name"]}
+    await asyncio.wait([ws.send(json.dumps(jsonMsg)) for ws in userWebsockets])
     return newId
 
 #Start websocket server with asyncio

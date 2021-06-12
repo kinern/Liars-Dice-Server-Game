@@ -21,7 +21,7 @@ import random
 players = []
 userWebsockets = []
 MAX_DICE = 5
-MIN_PLAYERS = 3
+MIN_PLAYERS = 2
 game = None
 
 
@@ -45,11 +45,7 @@ def parseMsg(msg):
     return jsonArr
 
 
-def getPlayerNames():
-    names = []
-    for player in inGamePlayers:
-        names.append(player["name"])
-    return names
+
 
 
 class Game:
@@ -59,22 +55,28 @@ class Game:
         self.prevBid = {"quantity": 0, "value":0}
 
 
+    def getPlayerNames(self):
+        names = []
+        for player in self.players:
+            names.append(player.name)
+        return names
+
     async def nextTurn(self):
-        if self.currentTurn >= len(self.players):
+        if self.currentTurn >= len(self.players)-1:
             self.currentTurn = 0
         else:
             self.currentTurn = self.currentTurn + 1
-        playerNames = getPlayerNames()
+        playerNames = self.getPlayerNames()
 
         #Todo: loop with dices for each player
         for player in self.players:
             jsonMsg = json.dumps({
                     "action": "next_turn", 
                     "players": playerNames, 
-                    "prev_bid": prevBid,
-                    "dice": player["dice"],
-                    "turn_id": players[currentTurn]["id"], 
-                    "turn_name": players[currentTurn]["name"]
+                    "prev_bid": self.prevBid,
+                    "dice": player.dice,
+                    "turn_id": players[self.currentTurn].id, 
+                    "turn_name": players[self.currentTurn].name
                     })
             await asyncio.wait([ws.send(jsonMsg) for ws in userWebsockets])
             await asyncio.sleep(5)
@@ -82,26 +84,26 @@ class Game:
 
     async def updateBid(self, response):
         if response["id"] == self.getCurrentTurnId():
-            self.prevBid["quantity"] = response["bid"]["quantity"]
-            self.prevBid["value"] = response["bid"]["value"]
+            self.prevBid["quantity"] = response["new_bid"]["quantity"]
+            self.prevBid["value"] = response["new_bid"]["value"]
             jsonMsg = json.dumps({
                 "action":"bid",
                 "player": response["id"],
-                "new_bid" : {"quantity" : response["bid"]["quantity"], "value" : response["bid"]["value"]}
+                "new_bid" : response["new_bid"]
             })
             await asyncio.wait([ws.send(jsonMsg) for ws in userWebsockets])
             await asyncio.sleep(5)
-            self.nextTurn()
+            await self.nextTurn()
 
 
-    def handleChallenge(self, response):
+    async def handleChallenge(self, response):
         if response["id"] == self.getCurrentTurnId():
-            self.challenge()
-            self.endRound()
+            await self.challenge()
+            await self.endRound()
 
 
     def getCurrentTurnId(self):
-        return self.players[self.currentTurn]["id"]
+        return self.players[self.currentTurn].id
 
 
     async def challenge(self):
@@ -120,8 +122,8 @@ class Game:
                 self.players[self.currentTurn-1].numDice - 1
         jsonMsg = json.dumps({
             "action":"challenge",
-            "challenge_player": self.players[self.currentTurn]["name"],
-            "bid_player": self.players[prevIndex]["name"],
+            "challenge_player": self.players[self.currentTurn].name,
+            "bid_player": self.players[prevIndex].name,
             "result": challengeResult,
             "result_dice": getDiceTotals()
         })
@@ -142,21 +144,21 @@ class Game:
         return  diceTotals[self.prevBid["value"]] >= self.prevBid["quantity"]
 
 
-    def endRound(self):
+    async def endRound(self):
         for player in self.players:
-            if len(player["dice"]) == 0:
+            if len(player.dice) == 0:
                 self.players.remove(player)
         if len(self.players) == 1:
-            endGame()
+            await self.endGame()
         else:
-            nextTurn() 
+            await self.nextTurn() 
 
 
     async def endGame(self):
         jsonMsg = json.dumps({
             "action": "endgame",
-            "winner": self.players[0]["name"],
-            "winner_id": self.player[0]["id"]
+            "winner": self.players[0].name,
+            "winner_id": self.players[0].id
         })
         await asyncio.wait([ws.send(jsonMsg) for ws in userWebsockets])
 
@@ -179,12 +181,12 @@ async def main(websocket, path):
 
                 if len(players) >= MIN_PLAYERS:
                     game = Game()
-                    game.nextTurn()
+                    await game.nextTurn()
 
             elif response["action"] == "bid":
-                game.updateBid(response)
+                await game.updateBid(response)
             elif response["action"] == "challenge":
-                game.handleChallenge(response)
+                await game.handleChallenge(response)
         response = {}
 
 

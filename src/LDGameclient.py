@@ -4,64 +4,80 @@ import asyncio
 import websockets
 import json
 
+
 messages = {
-    name: "== Please enter your name: ",
-    connected: 'You are connected to the Lair\'s Dice server! Hello.',
-    playerJoined: 'Player %s has joined.',
-    newGameStart: (
+    "name" : "== Please enter your name: ",
+    "connected" : 'You are connected to the Lair\'s Dice server! Hello.',
+    "playerJoined" : 'Player %s has joined.',
+    "newGameStart" : (
         "------------------------------------------------"
         "            Let's Play Lair's Dice!             "
         "------------------------------------------------"
     ),
-    roundStart : (
+    "roundStart" : (
         "=========== Next Turn ============="
         "Players: %s" 
         "Current bid: %s dice of value %s" 
         "Your dice: %s"
         "It is now player %s\'s turn."
         ),
-    yourTurnBidOnly: "You are the starting player! You will need to bid.",
-    yourBidQuantity: "== How many dice will you bid? (previous bid: %s dice of value %s):",
-    yourBidValue: "== What value of dice will you bid? (previous bid: %s dice of value %s):",
-    yourAction: '== It is your turn! Will you bid or challenge? ("B" or "C"):',
+    "yourTurnBidOnly" : "You are the starting player! You will need to bid.",
+    "yourBidQuantity" : "== How many dice will you bid? (previous bid: %s dice of value %s):",
+    "yourBidValue" : "== What value of dice will you bid? (previous bid: %s dice of value %s):",
+    "yourAction" : '== It is your turn! Will you bid or challenge? ("B" or "C"):',
     
-    playerBid: "Player %s has increased the bid to %s dice of value %s.",
-    challengeLostResult: (
+    "playerBid" : "Player %s has increased the bid to %s dice of value %s.",
+    "challengeLostResult" : (
         "Player %s has challenged the bid!"
         "The bid of %s dice of value %s was correct."
         "Player %s has lost the challenge and loses one die."
         "+++++++++++ Round Ended ++++++++++++"
     ),
-    challengeWonResult: (
+    "challengeWonResult" : (
         "Player %s has challenge the bid!"
         "The bid of %s dice of value %s was incorrect"
         "Player %s has lost the challenge and loses one die."
         "+++++++++++ Round Ended ++++++++++++"
     ),
-    playerLost: "Player %s has no more dice and has been removed from play.",
-
-    endGame: "The game has ended, player %s is the winner!",
-    endGameWon: "The game has ended, you have won the game! Congrats!"
+    "playerLost" : "Player %s has no more dice and has been removed from play.",
+    "endGame" : "The game has ended, player %s is the winner!",
+    "endGameWon" : "The game has ended, you have won the game! Congrats!"
 }
+
 
 def parseMsg(msg):
     jsonArr = json.loads(msg)
     return jsonArr
 
-playerId = None
+
+class Player:
+    def __init__(self):
+        self.id = 0
+        self.name = ""
+        self.dice = []
+
+
+player = Player()
+
 
 #Send username to the game server
 async def gameLoop():
     async with websockets.connect('ws://localhost:1234') as socket:
-        
+
+        print('== Client Started ==')
+
         #Initial setup: send name to server
-        if (playerId == None):
-            message = input(messages.name)
-            await socket.send(message)
+        if player.id == 0:
+            playerName = input(messages.name)
+            jsonMsg = {
+                "name": playerName
+            }
+            await socket.send(jsonMsg)
         
         #Get server message
         response = await socket.recv()
         response = parseMsg(response)
+        print(response)
 
         #Handle message
         if response.has_key("action"):
@@ -88,7 +104,7 @@ async def gameLoop():
         response = {}
 
 
-def handleNextTurn(response):
+async def handleNextTurn(response):
     #Find name of current turn player by searching through players by turn_id
     #Print next turn information
     print(messages["roundStart"], response["players"], response["prev_bid"], response["dice"], response["turn_name"])
@@ -103,7 +119,7 @@ def handleNextTurn(response):
             if actionType == "B":
                 bidQuantity = input(messages["yourBidQuantity"])
                 bidValue = input(messages["yourBidValue"])
-            else if actionType == "C":
+            elif actionType == "C":
                 #Send challenge message to server...
                 await socket.send("{action:'challenge', gameId:gameId, id:playerId}")
 

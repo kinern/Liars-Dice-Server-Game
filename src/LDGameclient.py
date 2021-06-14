@@ -21,26 +21,26 @@ messages = {
         "Your dice: %s\n"
         "It is now player %s\'s turn.\n"
         ),
-    "yourTurnBidOnly" : "You are the starting player! You will need to bid.",
-    "yourBidQuantity" : "== How many dice will you bid? (previous bid: %s dice of value %s):",
-    "yourBidValue" : "== What value of dice will you bid? (previous bid: %s dice of value %s):",
-    "yourAction" : '== It is your turn! Will you bid or challenge? ("B" or "C"):',
-    "playerBid" : "Player %s has increased the bid to %s dice of value %s.",
+    "yourTurnBidOnly" : "You are the starting player! You can only bid.",
+    "yourBidQuantity" : "How many dice to bid? (previous: %s dice of value %s):",
+    "yourBidValue" : "What dice face value to bid? (previous: %s dice of value %s):",
+    "yourAction" : 'Your turn! Bid or challenge? ("B" or "C"):',
+    "playerBid" : "Player %s increased the bid to %s dice of value %s.",
     "challengeLostResult" : (
-        "Player %s has challenged the bid!\n"
+        "Player %s challenged the bid!\n"
         "The bid of %s dice of value %s was correct.\n"
-        "Player %s has lost the challenge and loses one die.\n"
+        "Player %s lost the challenge and loses one die.\n"
         "+++++++++++ Round Ended ++++++++++++\n"
     ),
     "challengeWonResult" : (
-        "Player %s has challenge the bid!\n"
+        "Player %s challenged the bid!\n"
         "The bid of %s dice of value %s was incorrect\n"
-        "Player %s has lost the challenge and loses one die.\n"
+        "Player %s lost the challenge and loses one die.\n"
         "+++++++++++ Round Ended ++++++++++++\n"
     ),
-    "playerLost" : "Player %s has no more dice and has been removed from play.",
-    "endGame" : "The game has ended, player %s is the winner!",
-    "endGameWon" : "The game has ended, you have won the game! Congrats!",
+    "playerLost" : "Player %s has no dice and was removed.",
+    "endGame" : "The game ended, player %s is the winner!",
+    "endGameWon" : "You won the game! Congrats!",
     "bidInvalid" : "The bid was invalid, try again."
 }
 
@@ -89,7 +89,7 @@ class Game:
         await self.bid()
 
     ## Bidding
-    async def bid():
+    async def bid(self):
         if self.response["prev_bid"]["value"] == 0:
             await self.newBid()
         else:
@@ -108,8 +108,10 @@ class Game:
             self.response["prev_bid"]["quantity"], 
             self.response["prev_bid"]["value"]
         )
-        bidQuantity = input(yourBidQuantity)
-        bidValue = input(yourBidValue)
+        print(yourBidQuantity)
+        bidQuantity = input("-->")
+        print(yourBidValue)
+        bidValue = input("-->")
         jsonMsg = {
             "action": "bid",
             "id": self.player.id,
@@ -181,12 +183,14 @@ inputHelper = InputHelper()
 player = Player()
 game = Game(player)
 
+
 #Send username to the game server
 async def gameLoop():
     async with websockets.connect('ws://localhost:1234') as socket:
 
         print('== Client Started ==')
         game.serverSocket = socket
+        prevMsg = {"action": ""}
 
         #Initial setup: send name to server
         if game.player.id == 0:
@@ -202,11 +206,16 @@ async def gameLoop():
             response = await socket.recv()
             response = parseMsg(response)
             game.response = response
-            print(response)
 
             #Handle message
-            if "action" in response:
-                
+            if "action" in response and response["action"] != prevMsg["action"]:
+
+                print("\n")
+                print(response)
+                print("\n")
+
+                prevMsg = response
+
                 # Player Info Message
                 if response["action"] == "setup":
                     game.player.id = response["id"]

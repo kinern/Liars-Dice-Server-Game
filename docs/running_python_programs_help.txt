@@ -1,8 +1,0 @@
-To run the python programs:
-
-From the terminal write similar to:
-"python filename.py argument1 argument2"
-
-Both are currently defaulted to 
-Host = 'localhost'
-Port = 36713

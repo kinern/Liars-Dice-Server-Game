@@ -128,12 +128,13 @@ class Game:
         await self.serverSocket.send(json.dumps(jsonMsg))
 
     def handleChallenge(self):
-        msg = messages["challengeWonResult"] if self.response["won"] == 1 else messages["challengeLostResult"]
+        print(self.response["result"])
+        msg = messages["challengeWonResult"] if self.response["result"] == 1 else messages["challengeLostResult"]
         fullMsg = (msg % (
             self.response["challenge_name"], 
             self.response["prev_bid"]["quantity"], 
             self.response["prev_bid"]["value"], 
-            self.response["loser_name"])
+            self.response["bid_name"])
         )
         print(fullMsg)
 

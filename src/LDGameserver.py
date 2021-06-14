@@ -59,12 +59,10 @@ class Game:
         return names
 
     async def nextTurn(self):
-        print("current turn previous: %s" % (self.currentTurn))
         if self.currentTurn >= (len(self.players)-1):
             self.currentTurn = 0
         else:
             self.currentTurn = self.currentTurn + 1
-        print("new currentTurn: %s" % self.currentTurn)
 
         playerNames = self.getPlayerNames()
 
@@ -78,15 +76,15 @@ class Game:
                     "turn_id": players[self.currentTurn].id, 
                     "turn_name": players[self.currentTurn].name
                     })
-            await asyncio.wait([ws.send(jsonMsg) for ws in userWebsockets])
-            await asyncio.sleep(5)
+            await player.websocket.send(jsonMsg)
+        
+        print("Next Round\n")
+        print("Players: %s | Prev Bid: %s dice of value %s | Current turn: %s" % (playerNames, self.prevBid["quantity"], self.prevBid["value"], players[self.currentTurn].name))
+        print("\n")
 
 
     async def updateBid(self, response, websocket):
-
         print("Player %s is bidding %s dice of value %s \n" % (response["id"], response["new_bid"]["quantity"], response["new_bid"]["value"]))
-        print(self.currentTurn)
-        print(self.getCurrentTurnId())
 
         if response["id"] == self.getCurrentTurnId():
             if self.validBid(response["new_bid"]):
@@ -111,9 +109,6 @@ class Game:
             print("Bid is not from the current turn player. \n")
 
     def getCurrentTurnId(self):
-        print(self.currentTurn)
-        print(self.players[self.currentTurn])
-        print(self.players[self.currentTurn].id)
         return self.players[self.currentTurn].id
 
     def getPlayerById(self, id):
@@ -135,17 +130,16 @@ class Game:
             newQuantity = int(newBid["quantity"])
             newValue = int(newBid["value"])
         except:
-            print("int casting failed")
+            print("New bid int casting failed")
             return False
         if newQuantity >= self.diceSum() or newValue < 1 or newValue > 6:
-            print(self.diceSum())
-            print("dicesum or value not in range")
+            print("Bid value not in range 1 to 6 or quantity more than sum of all dice")
             return False
-        if newQuantity == self.prevBid["quantity"] and newValue == self.prevBid["value"]:
-            print("same bid made")
+        if newQuantity == int(self.prevBid["quantity"]) and newValue == int(self.prevBid["value"]):
+            print("Same bid as previous")
             return False
         if newQuantity < int(self.prevBid["quantity"]) or newValue < int(self.prevBid["value"]):
-            print("lower than previous bid")
+            print("New bid lower than previous bid")
             return False      
         return True
 
@@ -159,7 +153,7 @@ class Game:
     async def challenge(self):
         playerLen = len(self.players)
         prevIndex =  playerLen-1 if self.currentTurn == 0 else self.currentTurn-1
-        challengeRedult = self.correctBid()
+        challengeResult = self.correctBid()
         if challengeResult:
             if self.currentTurn == playerLen:
                 self.players[0].numDice - 1
@@ -172,13 +166,13 @@ class Game:
                 self.players[self.currentTurn-1].numDice - 1
         jsonMsg = json.dumps({
             "action":"challenge",
-            "challenge_player": self.players[self.currentTurn].name,
-            "bid_player": self.players[prevIndex].name,
+            "challenge_name": self.players[self.currentTurn].name,
+            "bid_name": self.players[prevIndex].name,
+            "prev_bid" : self.prevBid,
             "result": challengeResult,
-            "result_dice": getDiceTotals()
+            "result_dice": self.getDiceTotals()
         })
         await asyncio.wait([ws.send(jsonMsg) for ws in userWebsockets])
-        await asyncio.sleep(5)
 
 
     def getDiceTotals(self):
@@ -190,8 +184,8 @@ class Game:
 
 
     def correctBid(self):
-        diceTotals = getDiceTotals()
-        return  diceTotals[self.prevBid["value"]] >= self.prevBid["quantity"]
+        diceTotals = self.getDiceTotals()
+        return  diceTotals[int(self.prevBid["value"])] >= int(self.prevBid["quantity"])
 
 
     async def endRound(self):
@@ -222,7 +216,10 @@ async def main(websocket, path):
     while True:
         response = await websocket.recv()
         response = parseMsg(response)
+        
+        print("\n")
         print(response)
+        print("\n")
 
         if "action" in response:
             if response["action"] == "join":

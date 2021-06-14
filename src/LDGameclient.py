@@ -209,14 +209,9 @@ async def gameLoop():
             game.response = response
 
             #Handle message
+            #Todo handle multiple invalid bids
             if "action" in response and response["action"] != prevMsg["action"]:
-
-                print("\n")
-                print(response)
-                print("\n")
-
                 prevMsg = response
-
                 # Player Info Message
                 if response["action"] == "setup":
                     game.player.id = response["id"]

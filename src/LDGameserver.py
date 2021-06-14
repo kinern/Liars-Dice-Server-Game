@@ -156,14 +156,18 @@ class Game:
         challengeResult = self.correctBid()
         if challengeResult:
             if self.currentTurn == playerLen:
-                self.players[0].numDice - 1
+                numDice = self.players[0].numDice
+                self.players[0].numDice = numDice - 1
             else:
-                self.players[self.currentTurn-1].numDice - 1
+                numDice = self.players[self.currentTurn-1].numDice 
+                self.players[self.currentTurn-1].numDice = numDice - 1
         else:
             if self.currentTurn == 0:
-                self.players[0].numDice - 1
+                numDice = self.players[0].numDice
+                self.players[0].numDice  = numDice - 1
             else:
-                self.players[self.currentTurn-1].numDice - 1
+                numDice = self.players[self.currentTurn-1].numDice
+                self.players[self.currentTurn-1].numDice = numDice - 1
         jsonMsg = json.dumps({
             "action":"challenge",
             "challenge_name": self.players[self.currentTurn].name,
@@ -190,11 +194,14 @@ class Game:
 
     async def endRound(self):
         for player in self.players:
-            if len(player.dice) == 0:
+            print("Player: %s, numDice: %s, dice: %s" % (player.name, player.numDice, player.dice))
+            player.dice = player.createDice()
+            if player.numDice == 0:
                 self.players.remove(player)
         if len(self.players) == 1:
             await self.endGame()
         else:
+            self.prevBid = {"quantity":0, "value":0}
             await self.nextTurn() 
 
 

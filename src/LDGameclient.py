@@ -41,7 +41,8 @@ messages = {
     "playerLost" : "Player %s has no dice and was removed.",
     "endGame" : "The game ended, player %s is the winner!",
     "endGameWon" : "You won the game! Congrats!",
-    "bidInvalid" : "The bid was invalid, try again."
+    "bidInvalid" : "The bid was invalid, try again.",
+    "lostGame" : "You have run out of dice and are out of the game!"
 }
 
 
@@ -142,6 +143,10 @@ class Game:
     def endgame(self):
         msg = messages["endGameWon"] if self.response["winner_id"] == self.player.id else messages["endGame"]
         print(msg)
+    
+    def lostgame(self):
+        print(messages["lostGame"])
+
 
 
 class InputHelper:
@@ -178,16 +183,15 @@ class InputHelper:
                 inputNumber = int(inputNumber)
             validBid = inputNumber > minNumber and inputNumber <= maxNumber
         return inputNumber
-    
 
 inputHelper = InputHelper()
-player = Player()
-game = Game(player)
-
 
 #Send username to the game server
 async def gameLoop():
     async with websockets.connect('ws://localhost:1234') as socket:
+
+        player = Player()
+        game = Game(player)
 
         print('== Client Started ==')
         game.serverSocket = socket
@@ -233,8 +237,10 @@ async def gameLoop():
                         await game.handleInvalidBid()
                 if response["action"] == "challenge":
                     game.handleChallenge()
-                if response["action"] == "end_game":
-                    game.endgame(response)
+                if response["action"] == "endgame":
+                    game.endgame()
+                if response["action"] == "lostgame":
+                    game.lostgame()
                 
             #Empty response
             response = {}

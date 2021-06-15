@@ -1,20 +1,20 @@
 # Liars Dice Websocket Server Client Game
 
-Liar's Dice is a Client Server game made using Python's Websockets 
+Liar's Dice is a Client Server game made using Python's Websockets.  
 This was created for my CS Networking class while I was attending University.  
-I am in the process of refactoring/cleaning both the client and server code.  
+It has been updated to use the Asyncio library for handling multiple clients.  
 
-The npcVersionGame.py file is a version of the game that doesn't use websockets, 
-but instead has simple NPC players for opponents.
+The LDWithoutSockets.py file is a version of the game that doesn't have multiple clients.   
+Instead, it uses simple NPC players for opponents.  
 
 ##  How To Run:
 #### Client/Server
 run server and clients in seperate terminals.  
 
-    python LDGameServer.py
-    python LDGameClient.py
+    # python LDGameServer.py
+    # python LDGameClient.py
 
 #### NPC Version
-    python npcVersionGame.py  
+    # python LDWithoutSockets.py  
 
 
